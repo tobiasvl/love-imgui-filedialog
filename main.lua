@@ -15,6 +15,7 @@ function love.draw()
         filedialog = filedialog:draw()
     end
 
+    -- Draws imgui, without this no imgui windows will appear
     imgui.Render()
 end
 
@@ -41,13 +42,21 @@ end
 function love.mousepressed(x, y, button)
     imgui.MousePressed(button)
     if not filedialog then
+        -- This function will be called if a file is selected
         local function fileCallback(file)
             message = "You've picked "..file.name
         end
+
+        -- This function will be called if the file picker is closed without selecting a file
         local function cancelCallback()
             message = "You didn't pick a file"
         end
 
+        -- Create a file dialog.
+        -- args:
+        -- path -> the initial path to show in the file browser. If none is given, it will default to the location of main.lua
+        -- fileCallback -> the function to call when a file is selected
+        -- cancelCallback -> the function to call when the file browser is closed without selecting a file
         filedialog = Filedialog.new(nil, fileCallback, cancelCallback)
     end
 end
