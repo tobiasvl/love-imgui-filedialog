@@ -1,4 +1,4 @@
-local lfs = require("lfs")
+local nativefs = require("nativefs")
 
 local dialog = {}
 dialog.tmpDir = '.imguitmp'
@@ -21,7 +21,7 @@ function dialog.new(mode, ...)
     local self = {}
     setmetatable(self, {__index=dialog})
 
-    self.path = path or lfs.currentdir()
+    self.path = path or nativefs.getWorkingDirectory()
     self.files = {}
     self.fileCallback = fileCallback
     self.cancelCallback = cancelCallback
@@ -66,14 +66,6 @@ function dialog:draw()
 
     if not self.close then
         return self
-    end
-end
-
-function dialog.quit()
-    -- Clean up tmp directory
-    for name in lfs.dir(dialog.tmpDir) do
-        local path = dialog.tmpDir..'/'..name
-        os.remove(path)
     end
 end
 
@@ -140,7 +132,7 @@ function dialog:_drawListView()
         imgui.NextColumn()
 
         -- Size
-        if file.attributes.mode ~= 'directory' then
+        if file.attributes.type ~= 'directory' then
             local divisor
             local suffix
 
@@ -165,8 +157,10 @@ function dialog:_drawListView()
         imgui.NextColumn()
 
         -- Modified Date
-        local date = os.date("*t", file.attributes.modification)
-        imgui.Text(date.year..'-'..date.month..'-'..date.day)
+        local date = os.date("*t", file.attributes.modtime)
+        if date then
+            imgui.Text(date.year..'-'..date.month..'-'..date.day)
+        end
         imgui.NextColumn()
     end
 
@@ -188,7 +182,7 @@ function dialog:_drawButtons()
     if self.mode == 'open' then
         if imgui.Button("Open") then
             if self.fileCallback then
-                self.fileCallback(self:_getLink(self.files[self.selected].name))
+                self.fileCallback(self.files[self.selected].name)
             end
             self.close = true
         end
@@ -206,10 +200,10 @@ end
 function dialog:_updateFiles()
     self.selected = nil
     self.files = {}
-    for name in lfs.dir(self.path) do
+    for _, name in ipairs(nativefs.getDirectoryItems(self.path)) do
         local file = {}
         file.name = name
-        file.attributes = lfs.attributes(self.path..'/'..name)
+        file.attributes = nativefs.getInfo(self.path..'/'..name)
         if file.name ~= "." and file.name ~= ".." then
             table.insert(self.files, file)
         end
@@ -218,14 +212,6 @@ function dialog:_updateFiles()
         print(a, b.name)
     end
     table.sort(self.files, self._sortByName)
-end
-
-function dialog:_getLink(name)
-    local clock = os.clock()
-    lfs.link(self.path..'/'..name, self.tmpDir..'/'..clock)
-    print(self.tmpDir..'/'..clock)
-
-    return self.tmpDir..'/'..clock
 end
 
 function dialog:_fileClicked(i, name)
@@ -238,7 +224,7 @@ function dialog:_fileClicked(i, name)
         elseif self.files[i].attributes.mode == 'file' then
             if self.mode == 'open' then
                 if self.fileCallback then
-                    self.fileCallback(self:_getLink(self.files[i].name))
+                    self.fileCallback(self.files[i].name)
                 end
                 self.close = true
             elseif self.mode == 'save' then
@@ -255,7 +241,7 @@ function dialog:_fileClicked(i, name)
 end
 
 function dialog:_saveFile()
-    local tmpFile = lfs.currentdir()..'/'..self.saveFile
+    local tmpFile = nativefs.getWorkingDirectory()..'/'..self.saveFile
     local newFile = self.path..'/'..self.saveFilename
     os.rename(tmpFile, newFile)
     print(tmpFile, newFile)

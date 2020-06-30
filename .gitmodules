@@ -1,0 +1,3 @@
+[submodule "nativefs"]
+	path = nativefs
+	url = https://github.com/megagrump/nativefs.git
