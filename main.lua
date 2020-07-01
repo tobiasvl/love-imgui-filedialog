@@ -57,7 +57,7 @@ function love.mousepressed(x, y, button)
         -- path -> the initial path to show in the file browser. If none is given, it will default to the location of main.lua
         -- fileCallback -> the function to call when a file is selected
         -- cancelCallback -> the function to call when the file browser is closed without selecting a file
-        filedialog = Filedialog.new(nil, fileCallback, cancelCallback)
+        filedialog = Filedialog.new('open', fileCallback, cancelCallback)
     end
 end
 

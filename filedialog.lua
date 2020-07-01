@@ -1,7 +1,6 @@
-local nativefs = require("nativefs")
+local nativefs = require("imgui-filedialog.nativefs.nativefs")
 
 local dialog = {}
-dialog.tmpDir = '.imguitmp'
 
 function dialog.new(mode, ...)
     local args = {...}
@@ -22,6 +21,7 @@ function dialog.new(mode, ...)
     setmetatable(self, {__index=dialog})
 
     self.path = path or nativefs.getWorkingDirectory()
+    self.separator = "/"--string.sub(self.path, 1, 1) == '/' and '/' or '\\'
     self.files = {}
     self.fileCallback = fileCallback
     self.cancelCallback = cancelCallback
@@ -54,11 +54,7 @@ function dialog:draw()
     end
     if imgui.BeginPopupModal("File Chooser Dialog") then
         self:_drawPathbar()
-        if self.view == 'list' then
-            self:_drawListView()
-        elseif self.view == 'grid' then
-            self._drawGridView()
-        end
+        self:_drawListView()
         self:_drawButtons()
 
         imgui.EndPopup()
@@ -70,24 +66,20 @@ function dialog:draw()
 end
 
 function dialog:_drawPathbar()
-    imgui.BeginChild("Pathbar", imgui.GetContentRegionMax()-self._pathbar.viewButtonWidth-10, imgui.GetItemsLineHeightWithSpacing())
-        local dirs = {'/', unpack(self:_splitString(self.path, '/'))}
-        for i, name in ipairs(dirs) do
-            if imgui.Button(name) then
-                self:_gotoParentDir(#dirs - i)
+    imgui.BeginChild("Pathbar", imgui.GetContentRegionMax()-self._pathbar.viewButtonWidth-10, imgui.GetFontSize() + 4) -- love-imgui doesn't support imgui.GetItemsLineHeightWithSpacing()
+        local path = ''
+        for i in self.path:gmatch("[^"..self.separator.."]+") do
+            path = path .. (path ~= '' and self.separator or '') .. i
+            if i ~= self.separator then
+                if imgui.Button(i) then
+                    self.path = path
+                    self.tmpPath = self.path
+                    self:_updateFiles()
+                end
             end
             imgui.SameLine()
         end
     imgui.EndChild()
-    imgui.SameLine(imgui.GetContentRegionMax()-self._pathbar.viewButtonWidth)
-    if imgui.Button("View") then
-        if self.view == 'grid' then
-            self.view = 'list'
-        else
-            self.view = 'grid'
-        end
-    end
-    self._pathbar.viewButtonWidth = imgui.GetItemRectSize()
     if self.mode == 'save' then
         _, self.saveFilename = imgui.InputText("File Name", self.saveFilename, 64)
     end
@@ -95,7 +87,7 @@ end
 
 function dialog:_drawListView()
     -- Draw list view
-    imgui.BeginChild(0, 0, -imgui.GetItemsLineHeightWithSpacing())
+    imgui.BeginChild(0, 0, -imgui.GetFontSize() + 4)                        -- love-imgui doesn't support imgui.GetItemsLineHeightWithSpacing()
     imgui.Columns(3, nil, true)                                             -- Begin columns for file browser
     if not self.columnWidthSet then
         imgui.NextColumn()                                                  -- Move to Size column
@@ -126,13 +118,13 @@ function dialog:_drawListView()
     -- List files
     for i, file in ipairs(self.files) do
         -- Name
-        if imgui.Selectable(file.name, self.selected == i, "DontClosePopups") then
+        if imgui.Selectable(file.name .. (file.attributes and file.attributes.type == "directory" and self.separator or ''), self.selected == i, "DontClosePopups") then
             self:_fileClicked(i, file)
         end
         imgui.NextColumn()
 
         -- Size
-        if file.attributes.type ~= 'directory' then
+        if file.attributes and file.attributes.type ~= 'directory' then
             local divisor
             local suffix
 
@@ -157,9 +149,11 @@ function dialog:_drawListView()
         imgui.NextColumn()
 
         -- Modified Date
-        local date = os.date("*t", file.attributes.modtime)
-        if date then
-            imgui.Text(date.year..'-'..date.month..'-'..date.day)
+        if file.attributes then
+            local date = os.date("*t", file.attributes.modtime)
+            if date then
+                imgui.Text(string.format("%d-%02d-%02d", date.year, date.month, date.day))
+            end
         end
         imgui.NextColumn()
     end
@@ -181,10 +175,13 @@ function dialog:_drawButtons()
     imgui.SameLine()
     if self.mode == 'open' then
         if imgui.Button("Open") then
-            if self.fileCallback then
-                self.fileCallback(self.files[self.selected].name)
+            if self.files[self.selected].attributes and self.files[self.selected].attributes.type == "directory" then
+                self.path = self.path .. self.separator .. self.files[self.selected].name
+                self:_updateFiles()
+            elseif self.fileCallback then
+                self.fileCallback(nativefs.newFile(self.path .. '/' .. self.files[self.selected].name))
+                self.close = true
             end
-            self.close = true
         end
     elseif self.mode == 'save' then
         if imgui.Button('Save') then
@@ -203,13 +200,10 @@ function dialog:_updateFiles()
     for _, name in ipairs(nativefs.getDirectoryItems(self.path)) do
         local file = {}
         file.name = name
-        file.attributes = nativefs.getInfo(self.path..'/'..name)
+        file.attributes = nativefs.getInfo(self.path..self.separator..name)
         if file.name ~= "." and file.name ~= ".." then
             table.insert(self.files, file)
         end
-    end
-    for a, b in pairs(self.files) do
-        print(a, b.name)
     end
     table.sort(self.files, self._sortByName)
 end
@@ -218,13 +212,13 @@ function dialog:_fileClicked(i, name)
     -- Detect double click
     if (self.selected == i) and (os.clock() - self.selectedTime) < 0.25 then
         if self.files[i].attributes.mode == 'directory' then
-            self.path = self.path..'/'..self.files[i].name
+            self.path = self.path..self.separator..self.files[i].name
             self.tmpPath = self.path
             self:_updateFiles()
         elseif self.files[i].attributes.mode == 'file' then
             if self.mode == 'open' then
                 if self.fileCallback then
-                    self.fileCallback(self.files[i].name)
+                    self.fileCallback(nativefs.newFile(self.path .. self.separator .. self.files[i].name))
                 end
                 self.close = true
             elseif self.mode == 'save' then
@@ -234,15 +228,15 @@ function dialog:_fileClicked(i, name)
     else
         self.selected = i
     end
-    if self.files[i] and self.files[i].attributes.mode == 'file' then
+    if self.files[i] and self.files[i].attributes and self.files[i].attributes.mode == 'file' then
         self.saveFilename = self.files[i].name
     end
     self.selectedTime = os.clock()
 end
 
 function dialog:_saveFile()
-    local tmpFile = nativefs.getWorkingDirectory()..'/'..self.saveFile
-    local newFile = self.path..'/'..self.saveFilename
+    local tmpFile = nativefs.getWorkingDirectory()..self.separator..self.saveFile
+    local newFile = self.path..self.separator..self.saveFilename
     os.rename(tmpFile, newFile)
     print(tmpFile, newFile)
 end
@@ -258,20 +252,6 @@ end
 
 function dialog._sortByName(a, b)
     return string.lower(a.name) < string.lower(b.name)
-end
-
-function dialog:_gotoParentDir(n)
-    for i=1, n do
-        local index = self.path:find('/[^/]*$')
-        if index ~= 1 then
-            self.path = self.path:sub(0, index-1)
-        else
-            self.path = '/'
-        end
-
-        self.tmpPath = self.path
-        self:_updateFiles()
-    end
 end
 
 return dialog
