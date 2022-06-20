@@ -211,11 +211,11 @@ end
 function dialog:_fileClicked(i, name)
     -- Detect double click
     if (self.selected == i) and (os.clock() - self.selectedTime) < 0.25 then
-        if self.files[i].attributes.mode == 'directory' then
+        if self.files[i].attributes.typ 'directory' then
             self.path = self.path..self.separator..self.files[i].name
             self.tmpPath = self.path
             self:_updateFiles()
-        elseif self.files[i].attributes.mode == 'file' then
+        elseif self.files[i].attributes.type == 'file' then
             if self.mode == 'open' then
                 if self.fileCallback then
                     self.fileCallback(nativefs.newFile(self.path .. self.separator .. self.files[i].name))
@@ -228,7 +228,7 @@ function dialog:_fileClicked(i, name)
     else
         self.selected = i
     end
-    if self.files[i] and self.files[i].attributes and self.files[i].attributes.mode == 'file' then
+    if self.files[i] and self.files[i].attributes and self.files[i].attributes.type == 'file' then
         self.saveFilename = self.files[i].name
     end
     self.selectedTime = os.clock()
