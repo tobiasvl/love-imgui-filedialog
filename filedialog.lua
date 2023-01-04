@@ -1,3 +1,4 @@
+local imgui = require("imgui")
 local nativefs = require("love-imgui-filedialog.love-nativefs.nativefs")
 
 local dialog = {}
@@ -211,7 +212,7 @@ end
 function dialog:_fileClicked(i, name)
     -- Detect double click
     if (self.selected == i) and (os.clock() - self.selectedTime) < 0.25 then
-        if self.files[i].attributes.typ 'directory' then
+        if self.files[i].attributes.type == 'directory' then
             self.path = self.path..self.separator..self.files[i].name
             self.tmpPath = self.path
             self:_updateFiles()
